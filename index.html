@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>体重管理</title>
+<style>
+  :root{
+    --bg:#0f1220; --card:#1a1f35; --line:#2a3050; --fg:#e8ecf7; --sub:#9aa4c4;
+    --accent:#5b8cff; --ok:#39c07a; --warn:#ffb020; --bad:#ff5a6a;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f2f4fa; --card:#ffffff; --line:#e2e6f0; --fg:#151a2b; --sub:#5a6485; --accent:#2f66ff; }
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Meiryo",sans-serif;
+       background:var(--bg);color:var(--fg);padding-bottom:72px}
+  header{padding:14px 16px;font-weight:700;font-size:17px;position:sticky;top:0;background:var(--bg);z-index:5}
+  header small{color:var(--sub);font-weight:500;font-size:12px}
+  .tabbar{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);z-index:10}
+  .tabbar button{flex:1;padding:12px 4px;background:none;border:none;color:var(--sub);font-size:12px;font-weight:600}
+  .tabbar button.active{color:var(--accent)}
+  .tabbar .ic{display:block;font-size:20px;margin-bottom:2px}
+  .page{display:none;padding:0 16px 24px}
+  .page.active{display:block}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}
+  .prev{display:flex;justify-content:space-between;align-items:center}
+  .prev .big{font-size:22px;font-weight:800}
+  .prev .lbl{font-size:12px;color:var(--sub)}
+  .diff{font-size:13px;font-weight:700}
+  .valwrap{display:flex;align-items:center;justify-content:center;gap:14px;margin:10px 0 4px}
+  .valwrap .val{font-size:52px;font-weight:800;font-variant-numeric:tabular-nums;min-width:150px;text-align:center}
+  .valwrap .val small{font-size:20px;color:var(--sub);font-weight:600}
+  .step{width:60px;height:60px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:30px;font-weight:700;line-height:1}
+  .step:active{transform:scale(.93)}
+  .fine{display:flex;gap:8px;margin:10px 0}
+  .fine button{flex:1;padding:12px 0;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--fg);font-size:15px;font-weight:700}
+  .fine button:active{background:var(--line)}
+  label{font-size:12px;color:var(--sub);display:block;margin:12px 0 4px}
+  input[type=number],input[type=date]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);
+       background:var(--bg);color:var(--fg);font-size:17px}
+  button.btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:14px;font-size:16px;font-weight:700;width:100%;margin-top:14px}
+  button.btn:active{opacity:.85}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  td,th{padding:9px 6px;border-bottom:1px solid var(--line);text-align:left}
+  .del{color:var(--bad);background:none;border:none;font-size:13px}
+  .muted{color:var(--sub);font-size:12px}
+  .stage{width:100%}
+  .stage canvas{width:100%;display:block}
+  .up{color:var(--bad)} .down{color:var(--ok)} .flat{color:var(--sub)}
+</style>
+</head>
+<body>
+
+<header>体重管理 <small>手入力・グラフ</small></header>
+
+<!-- ===== 記録タブ ===== -->
+<section id="pg-rec" class="page active">
+  <div class="card prev">
+    <div><div class="lbl">前回</div><div class="big" id="prevVal">— kg</div><div class="lbl" id="prevDate"></div></div>
+    <div class="diff" id="diff"></div>
+  </div>
+
+  <div class="card">
+    <div class="valwrap">
+      <button class="step" id="minus">−</button>
+      <div class="val"><span id="cur">—</span> <small>kg</small></div>
+      <button class="step" id="plus">＋</button>
+    </div>
+    <div class="muted" style="text-align:center">＋/− は 0.1 kg ずつ</div>
+
+    <div class="fine">
+      <button data-d="-1">−1.0</button>
+      <button data-d="-0.5">−0.5</button>
+      <button data-d="0.5">＋0.5</button>
+      <button data-d="1">＋1.0</button>
+    </div>
+
+    <label>直接入力（kg）</label>
+    <input type="number" id="direct" step="0.1" inputmode="decimal" placeholder="例: 87.1">
+
+    <label>日付</label>
+    <input type="date" id="dIn">
+
+    <button class="btn" id="save">保存する</button>
+  </div>
+</section>
+
+<!-- ===== グラフタブ ===== -->
+<section id="pg-graph" class="page">
+  <div class="card">
+    <div class="stage"><canvas id="chart"></canvas></div>
+    <div class="muted" id="stat" style="margin-top:8px"></div>
+  </div>
+  <div class="card">
+    <table id="tbl"><thead><tr><th>日付</th><th>体重</th><th>前回差</th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+</section>
+
+<nav class="tabbar">
+  <button data-p="rec" class="active"><span class="ic">✏️</span>記録</button>
+  <button data-p="graph"><span class="ic">📈</span>グラフ</button>
+</nav>
+
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const LS='wt_records';
+const MIN=20, MAX=250;
+let cur=null; // 現在の入力値(kg)
+
+/* ---- データ ---- */
+const getRecs=()=>JSON.parse(localStorage.getItem(LS)||'[]');
+const setRecs=r=>localStorage.setItem(LS,JSON.stringify(r));
+const sortedAsc=()=>getRecs().slice().sort((a,b)=>a.date.localeCompare(b.date));
+const lastRec=()=>{const s=sortedAsc();return s.length?s[s.length-1]:null;};
+const pad=n=>String(n).padStart(2,'0');
+const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());};
+const round1=v=>Math.round(v*10)/10;
+
+/* ---- タブ ---- */
+document.querySelectorAll('.tabbar button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabbar button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); $('#pg-'+b.dataset.p).classList.add('active');
+  if(b.dataset.p==='graph') drawChart();
+});
+
+/* ---- 記録画面の初期化 ---- */
+function initRec(){
+  const last=lastRec();
+  if(last){ $('#prevVal').textContent=last.weight.toFixed(1)+' kg'; $('#prevDate').textContent=last.date; }
+  else { $('#prevVal').textContent='— kg'; $('#prevDate').textContent='記録なし'; }
+  cur = last ? last.weight : 65.0;   // 前回値からスタート
+  $('#dIn').value = todayStr();
+  renderCur();
+}
+function renderCur(){
+  cur = Math.min(MAX, Math.max(MIN, round1(cur)));
+  $('#cur').textContent = cur.toFixed(1);
+  $('#direct').value = cur.toFixed(1);
+  const last=lastRec();
+  if(last){
+    const d=round1(cur-last.weight);
+    const el=$('#diff');
+    if(d>0){ el.className='diff up'; el.textContent='前回比 +'+d.toFixed(1)+' kg ▲'; }
+    else if(d<0){ el.className='diff down'; el.textContent='前回比 '+d.toFixed(1)+' kg ▼'; }
+    else { el.className='diff flat'; el.textContent='前回比 ±0 kg'; }
+  } else $('#diff').textContent='';
+}
+function bump(delta){ cur=round1((cur??65)+delta); renderCur(); }
+
+$('#minus').onclick=()=>bump(-0.1);
+$('#plus').onclick=()=>bump(0.1);
+document.querySelectorAll('.fine button').forEach(b=>b.onclick=()=>bump(parseFloat(b.dataset.d)));
+$('#direct').oninput=()=>{ const v=parseFloat($('#direct').value); if(!isNaN(v)){ cur=v;
+  $('#cur').textContent=Math.min(MAX,Math.max(MIN,round1(v))).toFixed(1);
+  const last=lastRec(); if(last){const d=round1(v-last.weight);const el=$('#diff');
+    el.className='diff '+(d>0?'up':d<0?'down':'flat'); el.textContent='前回比 '+(d>0?'+':'')+d.toFixed(1)+' kg';} } };
+
+/* ---- 保存（同じ日付は上書き） ---- */
+$('#save').onclick=()=>{
+  const w=round1(parseFloat($('#direct').value));
+  const date=$('#dIn').value;
+  if(isNaN(w)){ alert('体重を入力してください'); return; }
+  if(!date){ alert('日付を選んでください'); return; }
+  if(w<MIN||w>MAX){ alert('体重の値を確認してください'); return; }
+  const recs=getRecs();
+  const i=recs.findIndex(r=>r.date===date);
+  if(i>=0) recs[i].weight=w;
+  else recs.push({id:Date.now()+Math.floor(performance.now()),date,weight:w});
+  setRecs(recs);
+  initRec();
+  document.querySelector('.tabbar button[data-p=graph]').click();
+};
+
+/* ---- グラフ ---- */
+function drawChart(){
+  const recs=sortedAsc();
+  const cv=$('#chart'),ctx=cv.getContext('2d');
+  const W=cv.width=cv.clientWidth*2, H=cv.height=480;
+  ctx.clearRect(0,0,W,H); ctx.font='22px sans-serif';
+  const css=getComputedStyle(document.body);
+  const sub=css.getPropertyValue('--sub'),acc=css.getPropertyValue('--accent'),line=css.getPropertyValue('--line');
+  drawTable(recs);
+  if(recs.length===0){ ctx.fillStyle=sub; ctx.fillText('記録がありません',30,H/2); $('#stat').textContent=''; return; }
+  const ws=recs.map(r=>r.weight);
+  let lo=Math.min(...ws)-1, hi=Math.max(...ws)+1; if(hi-lo<2){lo-=1;hi+=1;}
+  const padL=76,padR=30,padT=28,padB=52;
+  const X=i=>padL+(W-padL-padR)*(recs.length===1?0.5:i/(recs.length-1));
+  const Y=w=>padT+(H-padT-padB)*(1-(w-lo)/(hi-lo));
+  ctx.strokeStyle=line; ctx.fillStyle=sub; ctx.lineWidth=1; ctx.textAlign='right';
+  for(let k=0;k<=4;k++){const wv=lo+(hi-lo)*k/4,y=Y(wv);ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(W-padR,y);ctx.stroke();ctx.fillText(wv.toFixed(1),padL-8,y+7);}
+  ctx.strokeStyle=acc; ctx.lineWidth=3; ctx.beginPath();
+  recs.forEach((r,i)=>{const x=X(i),y=Y(r.weight);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}); ctx.stroke();
+  ctx.fillStyle=acc; recs.forEach((r,i)=>{ctx.beginPath();ctx.arc(X(i),Y(r.weight),5,0,7);ctx.fill();});
+  ctx.fillStyle=sub; ctx.textAlign='center';
+  ctx.fillText(recs[0].date.slice(5),X(0),H-16);
+  if(recs.length>1) ctx.fillText(recs[recs.length-1].date.slice(5),X(recs.length-1),H-16);
+  const last=recs[recs.length-1].weight, first=recs[0].weight, diff=round1(last-first);
+  $('#stat').innerHTML='最新 <b>'+last.toFixed(1)+'kg</b> ／ 期間増減 '+(diff>0?'+':'')+diff.toFixed(1)+'kg ／ 記録 '+recs.length+'件';
+}
+function drawTable(recsAsc){
+  const tb=$('#tbl tbody'); tb.innerHTML='';
+  const desc=recsAsc.slice().reverse();
+  desc.forEach((r,idx)=>{
+    const prev=desc[idx+1]; // 1つ前の記録(時系列で前)
+    let diffCell='—';
+    if(prev){const d=round1(r.weight-prev.weight); diffCell='<span class="'+(d>0?'up':d<0?'down':'flat')+'">'+(d>0?'+':'')+d.toFixed(1)+'</span>';}
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+r.date+'</td><td>'+r.weight.toFixed(1)+' kg</td><td>'+diffCell+'</td><td><button class="del">削除</button></td>';
+    tr.querySelector('.del').onclick=()=>{ if(confirm(r.date+' の記録を削除しますか?')){ setRecs(getRecs().filter(x=>x.id!==r.id)); drawChart(); initRec(); } };
+    tb.appendChild(tr);
+  });
+}
+
+/* ---- 起動 ---- */
+initRec();
+</script>
+</body>
+</html>
