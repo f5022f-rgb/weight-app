@@ -15,8 +15,13 @@
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{margin:0;font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Meiryo",sans-serif;
        background:var(--bg);color:var(--fg);padding-bottom:72px}
-  header{padding:14px 16px;font-weight:700;font-size:17px;position:sticky;top:0;background:var(--bg);z-index:5}
+  header{padding:12px 16px 8px;font-weight:700;font-size:17px}
   header small{color:var(--sub);font-weight:500;font-size:12px}
+  .pbar{position:sticky;top:0;z-index:6;background:var(--bg);display:flex;gap:8px;align-items:center;
+        padding:8px 16px;border-bottom:1px solid var(--line)}
+  .pbar select{flex:1;padding:9px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:15px;font-weight:700}
+  .mini{padding:9px 11px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:13px;font-weight:700}
+  .mini:active{background:var(--line)}
   .tabbar{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);z-index:10}
   .tabbar button{flex:1;padding:12px 4px;background:none;border:none;color:var(--sub);font-size:12px;font-weight:600}
   .tabbar button.active{color:var(--accent)}
@@ -28,7 +33,7 @@
   .prev .big{font-size:22px;font-weight:800}
   .prev .lbl{font-size:12px;color:var(--sub)}
   .diff{font-size:13px;font-weight:700}
-  .valwrap{display:flex;align-items:center;justify-content:center;gap:14px;margin:10px 0 4px}
+  .valwrap{display:flex;align-items:center;justify-content:center;gap:14px;margin:6px 0 4px}
   .valwrap .val{font-size:52px;font-weight:800;font-variant-numeric:tabular-nums;min-width:150px;text-align:center}
   .valwrap .val small{font-size:20px;color:var(--sub);font-weight:600}
   .step{width:60px;height:60px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:30px;font-weight:700;line-height:1}
@@ -41,6 +46,12 @@
        background:var(--bg);color:var(--fg);font-size:17px}
   button.btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:14px;font-size:16px;font-weight:700;width:100%;margin-top:14px}
   button.btn:active{opacity:.85}
+  .seg{display:flex;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:12px 0}
+  .seg button{flex:1;padding:10px 0;background:transparent;border:none;color:var(--sub);font-size:14px;font-weight:700}
+  .seg button.active{background:var(--accent);color:#fff}
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .tile{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}
+  .tile .t{font-size:11px;color:var(--sub)} .tile .v{font-size:18px;font-weight:800;margin-top:2px}
   table{width:100%;border-collapse:collapse;font-size:14px}
   td,th{padding:9px 6px;border-bottom:1px solid var(--line);text-align:left}
   .del{color:var(--bad);background:none;border:none;font-size:13px}
@@ -48,11 +59,19 @@
   .stage{width:100%}
   .stage canvas{width:100%;display:block}
   .up{color:var(--bad)} .down{color:var(--ok)} .flat{color:var(--sub)}
+  h3{margin:2px 0 8px;font-size:14px}
 </style>
 </head>
 <body>
 
-<header>体重管理 <small>手入力・グラフ</small></header>
+<header>体重管理 <small>家族で共有・手入力</small></header>
+
+<div class="pbar">
+  <span class="muted">ユーザー</span>
+  <select id="profSel"></select>
+  <button class="mini" id="profAdd">＋追加</button>
+  <button class="mini" id="profEdit">✎</button>
+</div>
 
 <!-- ===== 記録タブ ===== -->
 <section id="pg-rec" class="page active">
@@ -68,20 +87,16 @@
       <button class="step" id="plus">＋</button>
     </div>
     <div class="muted" style="text-align:center">＋/− は 0.1 kg ずつ</div>
-
     <div class="fine">
       <button data-d="-1">−1.0</button>
       <button data-d="-0.5">−0.5</button>
       <button data-d="0.5">＋0.5</button>
       <button data-d="1">＋1.0</button>
     </div>
-
     <label>直接入力（kg）</label>
     <input type="number" id="direct" step="0.1" inputmode="decimal" placeholder="例: 87.1">
-
     <label>日付</label>
     <input type="date" id="dIn">
-
     <button class="btn" id="save">保存する</button>
   </div>
 </section>
@@ -89,6 +104,16 @@
 <!-- ===== グラフタブ ===== -->
 <section id="pg-graph" class="page">
   <div class="card">
+    <h3 id="sumTitle">生涯サマリー</h3>
+    <div class="tiles" id="tiles"></div>
+    <div class="muted" id="period" style="margin-top:8px"></div>
+  </div>
+  <div class="card">
+    <div class="seg" id="seg">
+      <button data-per="day" class="active">日別</button>
+      <button data-per="month">月別</button>
+      <button data-per="year">年別</button>
+    </div>
     <div class="stage"><canvas id="chart"></canvas></div>
     <div class="muted" id="stat" style="margin-top:8px"></div>
   </div>
@@ -105,117 +130,189 @@
 <script>
 "use strict";
 const $=s=>document.querySelector(s);
-const LS='wt_records';
+const LS_P='wt_profiles', LS_R='wt_records', LS_CUR='wt_curprof';
 const MIN=20, MAX=250;
-let cur=null; // 現在の入力値(kg)
+let cur=null, period='day';
 
-/* ---- データ ---- */
-const getRecs=()=>JSON.parse(localStorage.getItem(LS)||'[]');
-const setRecs=r=>localStorage.setItem(LS,JSON.stringify(r));
-const sortedAsc=()=>getRecs().slice().sort((a,b)=>a.date.localeCompare(b.date));
-const lastRec=()=>{const s=sortedAsc();return s.length?s[s.length-1]:null;};
+/* ---------- プロフィール ---------- */
+function loadProfiles(){
+  let p=JSON.parse(localStorage.getItem(LS_P)||'null');
+  if(!p||!p.length){ p=[{id:'p1',name:'わたし'}]; localStorage.setItem(LS_P,JSON.stringify(p)); }
+  return p;
+}
+function saveProfiles(p){ localStorage.setItem(LS_P,JSON.stringify(p)); }
+function curProfId(){
+  let c=localStorage.getItem(LS_CUR); const ps=loadProfiles();
+  if(!c||!ps.find(x=>x.id===c)){ c=ps[0].id; localStorage.setItem(LS_CUR,c); }
+  return c;
+}
+function curProfName(){ const p=loadProfiles().find(x=>x.id===curProfId()); return p?p.name:''; }
+
+/* ---------- 記録データ（ユーザーごと） ---------- */
+function allRecs(){
+  let r=JSON.parse(localStorage.getItem(LS_R)||'[]');
+  const pid=loadProfiles()[0].id; let changed=false;
+  r.forEach(x=>{ if(!x.profileId){ x.profileId=pid; changed=true; } }); // 旧データ移行
+  if(changed) localStorage.setItem(LS_R,JSON.stringify(r));
+  return r;
+}
+function saveAllRecs(r){ localStorage.setItem(LS_R,JSON.stringify(r)); }
+function recsAsc(){ return allRecs().filter(r=>r.profileId===curProfId()).sort((a,b)=>a.date.localeCompare(b.date)); }
+function lastRec(){ const s=recsAsc(); return s.length?s[s.length-1]:null; }
+
 const pad=n=>String(n).padStart(2,'0');
 const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());};
 const round1=v=>Math.round(v*10)/10;
 
-/* ---- タブ ---- */
+/* ---------- プロフィールUI ---------- */
+function renderProfiles(){
+  const ps=loadProfiles(), sel=$('#profSel'); sel.innerHTML='';
+  ps.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;sel.appendChild(o);});
+  sel.value=curProfId();
+}
+$('#profSel').onchange=()=>{ localStorage.setItem(LS_CUR,$('#profSel').value); refreshAll(); };
+$('#profAdd').onclick=()=>{
+  const name=(prompt('追加するユーザー名（例：嫁、たろう）')||'').trim();
+  if(!name) return;
+  const ps=loadProfiles(); const id='p'+Date.now(); ps.push({id,name}); saveProfiles(ps);
+  localStorage.setItem(LS_CUR,id); refreshAll();
+};
+$('#profEdit').onclick=()=>{
+  const ps=loadProfiles(); const id=curProfId(); const p=ps.find(x=>x.id===id);
+  const name=prompt('名前を変更（空欄にして OK で「このユーザーと全記録を削除」）', p.name);
+  if(name===null) return;
+  const t=name.trim();
+  if(t===''){
+    if(ps.length<=1){ alert('最後の1人は削除できません'); return; }
+    if(!confirm('「'+p.name+'」と、その全記録を削除します。よろしいですか？')) return;
+    saveProfiles(ps.filter(x=>x.id!==id));
+    saveAllRecs(allRecs().filter(r=>r.profileId!==id));
+    localStorage.setItem(LS_CUR,loadProfiles()[0].id);
+  } else { p.name=t; saveProfiles(ps); }
+  refreshAll();
+};
+
+/* ---------- タブ ---------- */
 document.querySelectorAll('.tabbar button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tabbar button').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); $('#pg-'+b.dataset.p).classList.add('active');
-  if(b.dataset.p==='graph') drawChart();
+  if(b.dataset.p==='graph') drawGraph();
 });
 
-/* ---- 記録画面の初期化 ---- */
+/* ---------- 記録画面 ---------- */
 function initRec(){
   const last=lastRec();
   if(last){ $('#prevVal').textContent=last.weight.toFixed(1)+' kg'; $('#prevDate').textContent=last.date; }
   else { $('#prevVal').textContent='— kg'; $('#prevDate').textContent='記録なし'; }
-  cur = last ? last.weight : 65.0;   // 前回値からスタート
-  $('#dIn').value = todayStr();
+  cur = last ? last.weight : 65.0;
+  $('#dIn').value=todayStr();
   renderCur();
 }
 function renderCur(){
-  cur = Math.min(MAX, Math.max(MIN, round1(cur)));
-  $('#cur').textContent = cur.toFixed(1);
-  $('#direct').value = cur.toFixed(1);
-  const last=lastRec();
-  if(last){
-    const d=round1(cur-last.weight);
-    const el=$('#diff');
-    if(d>0){ el.className='diff up'; el.textContent='前回比 +'+d.toFixed(1)+' kg ▲'; }
-    else if(d<0){ el.className='diff down'; el.textContent='前回比 '+d.toFixed(1)+' kg ▼'; }
-    else { el.className='diff flat'; el.textContent='前回比 ±0 kg'; }
-  } else $('#diff').textContent='';
+  cur=Math.min(MAX,Math.max(MIN,round1(cur)));
+  $('#cur').textContent=cur.toFixed(1);
+  $('#direct').value=cur.toFixed(1);
+  showDiff(cur);
 }
-function bump(delta){ cur=round1((cur??65)+delta); renderCur(); }
-
+function showDiff(v){
+  const last=lastRec(), el=$('#diff');
+  if(!last){ el.textContent=''; return; }
+  const d=round1(v-last.weight);
+  el.className='diff '+(d>0?'up':d<0?'down':'flat');
+  el.textContent='前回比 '+(d>0?'+':'')+d.toFixed(1)+' kg '+(d>0?'▲':d<0?'▼':'');
+}
+function bump(delta){ cur=round1((cur==null?65:cur)+delta); renderCur(); }
 $('#minus').onclick=()=>bump(-0.1);
 $('#plus').onclick=()=>bump(0.1);
 document.querySelectorAll('.fine button').forEach(b=>b.onclick=()=>bump(parseFloat(b.dataset.d)));
-$('#direct').oninput=()=>{ const v=parseFloat($('#direct').value); if(!isNaN(v)){ cur=v;
-  $('#cur').textContent=Math.min(MAX,Math.max(MIN,round1(v))).toFixed(1);
-  const last=lastRec(); if(last){const d=round1(v-last.weight);const el=$('#diff');
-    el.className='diff '+(d>0?'up':d<0?'down':'flat'); el.textContent='前回比 '+(d>0?'+':'')+d.toFixed(1)+' kg';} } };
+$('#direct').oninput=()=>{ const v=parseFloat($('#direct').value); if(!isNaN(v)){ cur=v; $('#cur').textContent=Math.min(MAX,Math.max(MIN,round1(v))).toFixed(1); showDiff(v);} };
 
-/* ---- 保存（同じ日付は上書き） ---- */
 $('#save').onclick=()=>{
-  const w=round1(parseFloat($('#direct').value));
-  const date=$('#dIn').value;
+  const w=round1(parseFloat($('#direct').value)), date=$('#dIn').value;
   if(isNaN(w)){ alert('体重を入力してください'); return; }
   if(!date){ alert('日付を選んでください'); return; }
   if(w<MIN||w>MAX){ alert('体重の値を確認してください'); return; }
-  const recs=getRecs();
-  const i=recs.findIndex(r=>r.date===date);
-  if(i>=0) recs[i].weight=w;
-  else recs.push({id:Date.now()+Math.floor(performance.now()),date,weight:w});
-  setRecs(recs);
+  const recs=allRecs(), pid=curProfId();
+  const i=recs.findIndex(r=>r.profileId===pid&&r.date===date);
+  if(i>=0) recs[i].weight=w; else recs.push({id:Date.now()+Math.floor(performance.now()),profileId:pid,date,weight:w});
+  saveAllRecs(recs);
   initRec();
   document.querySelector('.tabbar button[data-p=graph]').click();
 };
 
-/* ---- グラフ ---- */
-function drawChart(){
-  const recs=sortedAsc();
+/* ---------- 集計 ---------- */
+function groupAvg(recs,keyFn){
+  const m={}; recs.forEach(r=>{const k=keyFn(r.date); (m[k]=m[k]||[]).push(r.weight);});
+  return Object.keys(m).sort().map(k=>({label:k,value:m[k].reduce((a,b)=>a+b,0)/m[k].length,n:m[k].length}));
+}
+function seriesFor(p){
+  const recs=recsAsc();
+  if(p==='month') return groupAvg(recs,d=>d.slice(0,7)).map(o=>({label:o.label.slice(2),value:o.value}));
+  if(p==='year')  return groupAvg(recs,d=>d.slice(0,4));
+  return recs.map(r=>({label:r.date.slice(5),value:r.weight}));
+}
+
+/* ---------- グラフ描画 ---------- */
+function drawGraph(){
+  renderSummary(); renderTable();
+  const pts=seriesFor(period);
   const cv=$('#chart'),ctx=cv.getContext('2d');
-  const W=cv.width=cv.clientWidth*2, H=cv.height=480;
+  const W=cv.width=cv.clientWidth*2, H=cv.height=460;
   ctx.clearRect(0,0,W,H); ctx.font='22px sans-serif';
   const css=getComputedStyle(document.body);
   const sub=css.getPropertyValue('--sub'),acc=css.getPropertyValue('--accent'),line=css.getPropertyValue('--line');
-  drawTable(recs);
-  if(recs.length===0){ ctx.fillStyle=sub; ctx.fillText('記録がありません',30,H/2); $('#stat').textContent=''; return; }
-  const ws=recs.map(r=>r.weight);
-  let lo=Math.min(...ws)-1, hi=Math.max(...ws)+1; if(hi-lo<2){lo-=1;hi+=1;}
-  const padL=76,padR=30,padT=28,padB=52;
-  const X=i=>padL+(W-padL-padR)*(recs.length===1?0.5:i/(recs.length-1));
-  const Y=w=>padT+(H-padT-padB)*(1-(w-lo)/(hi-lo));
+  if(pts.length===0){ ctx.fillStyle=sub; ctx.fillText('記録がありません',30,H/2); $('#stat').textContent=''; return; }
+  const vs=pts.map(p=>p.value);
+  let lo=Math.min(...vs)-1, hi=Math.max(...vs)+1; if(hi-lo<2){lo-=1;hi+=1;}
+  const padL=76,padR=30,padT=24,padB=52;
+  const X=i=>padL+(W-padL-padR)*(pts.length===1?0.5:i/(pts.length-1));
+  const Y=v=>padT+(H-padT-padB)*(1-(v-lo)/(hi-lo));
   ctx.strokeStyle=line; ctx.fillStyle=sub; ctx.lineWidth=1; ctx.textAlign='right';
   for(let k=0;k<=4;k++){const wv=lo+(hi-lo)*k/4,y=Y(wv);ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(W-padR,y);ctx.stroke();ctx.fillText(wv.toFixed(1),padL-8,y+7);}
   ctx.strokeStyle=acc; ctx.lineWidth=3; ctx.beginPath();
-  recs.forEach((r,i)=>{const x=X(i),y=Y(r.weight);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}); ctx.stroke();
-  ctx.fillStyle=acc; recs.forEach((r,i)=>{ctx.beginPath();ctx.arc(X(i),Y(r.weight),5,0,7);ctx.fill();});
+  pts.forEach((p,i)=>{const x=X(i),y=Y(p.value);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}); ctx.stroke();
+  ctx.fillStyle=acc; pts.forEach((p,i)=>{ctx.beginPath();ctx.arc(X(i),Y(p.value),5,0,7);ctx.fill();});
   ctx.fillStyle=sub; ctx.textAlign='center';
-  ctx.fillText(recs[0].date.slice(5),X(0),H-16);
-  if(recs.length>1) ctx.fillText(recs[recs.length-1].date.slice(5),X(recs.length-1),H-16);
-  const last=recs[recs.length-1].weight, first=recs[0].weight, diff=round1(last-first);
-  $('#stat').innerHTML='最新 <b>'+last.toFixed(1)+'kg</b> ／ 期間増減 '+(diff>0?'+':'')+diff.toFixed(1)+'kg ／ 記録 '+recs.length+'件';
+  ctx.fillText(pts[0].label,X(0),H-16);
+  if(pts.length>1) ctx.fillText(pts[pts.length-1].label,X(pts.length-1),H-16);
+  const unit={day:'日別',month:'月別平均',year:'年別平均'}[period];
+  $('#stat').innerHTML=unit+'：'+pts.length+'点 ／ 最新 <b>'+pts[pts.length-1].value.toFixed(1)+'kg</b>';
 }
-function drawTable(recsAsc){
-  const tb=$('#tbl tbody'); tb.innerHTML='';
-  const desc=recsAsc.slice().reverse();
+function renderSummary(){
+  const recs=recsAsc();
+  $('#sumTitle').textContent=curProfName()+' の生涯サマリー';
+  const t=$('#tiles');
+  if(recs.length===0){ t.innerHTML='<div class="tile" style="grid-column:1/-1"><div class="t">記録がありません</div></div>'; $('#period').textContent=''; return; }
+  const ws=recs.map(r=>r.weight);
+  const latest=recs[recs.length-1].weight, mn=Math.min(...ws), mx=Math.max(...ws);
+  const avg=ws.reduce((a,b)=>a+b,0)/ws.length, chg=round1(latest-recs[0].weight);
+  const tile=(t,v)=>'<div class="tile"><div class="t">'+t+'</div><div class="v">'+v+'</div></div>';
+  t.innerHTML=tile('最新',latest.toFixed(1))+tile('最小',mn.toFixed(1))+tile('最大',mx.toFixed(1))
+    +tile('平均',avg.toFixed(1))+tile('記録数',recs.length+'件')+tile('通算増減',(chg>=0?'+':'')+chg.toFixed(1));
+  $('#period').textContent='期間：'+recs[0].date+' 〜 '+recs[recs.length-1].date;
+}
+function renderTable(){
+  const desc=recsAsc().slice().reverse(), tb=$('#tbl tbody'); tb.innerHTML='';
   desc.forEach((r,idx)=>{
-    const prev=desc[idx+1]; // 1つ前の記録(時系列で前)
-    let diffCell='—';
-    if(prev){const d=round1(r.weight-prev.weight); diffCell='<span class="'+(d>0?'up':d<0?'down':'flat')+'">'+(d>0?'+':'')+d.toFixed(1)+'</span>';}
+    const prev=desc[idx+1]; let dc='—';
+    if(prev){const d=round1(r.weight-prev.weight); dc='<span class="'+(d>0?'up':d<0?'down':'flat')+'">'+(d>0?'+':'')+d.toFixed(1)+'</span>';}
     const tr=document.createElement('tr');
-    tr.innerHTML='<td>'+r.date+'</td><td>'+r.weight.toFixed(1)+' kg</td><td>'+diffCell+'</td><td><button class="del">削除</button></td>';
-    tr.querySelector('.del').onclick=()=>{ if(confirm(r.date+' の記録を削除しますか?')){ setRecs(getRecs().filter(x=>x.id!==r.id)); drawChart(); initRec(); } };
+    tr.innerHTML='<td>'+r.date+'</td><td>'+r.weight.toFixed(1)+' kg</td><td>'+dc+'</td><td><button class="del">削除</button></td>';
+    tr.querySelector('.del').onclick=()=>{ if(confirm(r.date+' の記録を削除しますか?')){ saveAllRecs(allRecs().filter(x=>x.id!==r.id)); drawGraph(); initRec(); } };
     tb.appendChild(tr);
   });
 }
+document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#seg button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); period=b.dataset.per; drawGraph();
+});
 
-/* ---- 起動 ---- */
-initRec();
+/* ---------- 全体更新 ---------- */
+function refreshAll(){ renderProfiles(); initRec(); if($('#pg-graph').classList.contains('active')) drawGraph(); }
+
+/* ---------- 起動 ---------- */
+renderProfiles(); initRec();
 </script>
 </body>
 </html>
