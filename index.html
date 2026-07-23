@@ -133,7 +133,7 @@
     <div class="muted" id="stat" style="margin-top:8px"></div>
   </div>
   <div class="card">
-    <table id="tbl"><thead><tr><th>日付</th><th>体重</th><th>前回差</th><th></th></tr></thead><tbody></tbody></table>
+    <table id="tbl"><thead><tr><th>日付・時刻</th><th>体重</th><th>前回差</th><th></th></tr></thead><tbody></tbody></table>
   </div>
 </section>
 
@@ -248,9 +248,11 @@ $('#save').onclick=()=>{
   if(isNaN(w)){ alert('体重を入力してください'); return; }
   if(!date){ alert('日付を選んでください'); return; }
   if(w<MIN||w>MAX){ alert('体重の値を確認してください'); return; }
+  const now=new Date(), time=pad(now.getHours())+':'+pad(now.getMinutes()); // 入力した時刻を自動取得
   const recs=allRecs(), pid=curProfId();
   const i=recs.findIndex(r=>r.profileId===pid&&r.date===date);
-  if(i>=0) recs[i].weight=w; else recs.push({id:Date.now()+Math.floor(performance.now()),profileId:pid,date,weight:w});
+  if(i>=0){ recs[i].weight=w; recs[i].time=time; }
+  else recs.push({id:Date.now()+Math.floor(performance.now()),profileId:pid,date,weight:w,time});
   saveAllRecs(recs);
   initRec();
   document.querySelector('.tabbar button[data-p=graph]').click();
@@ -313,7 +315,8 @@ function renderTable(){
     const prev=desc[idx+1]; let dc='—';
     if(prev){const d=round1(r.weight-prev.weight); dc='<span class="'+(d>0?'up':d<0?'down':'flat')+'">'+(d>0?'+':'')+d.toFixed(1)+'</span>';}
     const tr=document.createElement('tr');
-    tr.innerHTML='<td>'+r.date+'</td><td>'+r.weight.toFixed(1)+' kg</td><td>'+dc+'</td><td><button class="del">削除</button></td>';
+    const dcell=r.date+(r.time?' <span class="muted">'+r.time+'</span>':'');
+    tr.innerHTML='<td>'+dcell+'</td><td>'+r.weight.toFixed(1)+' kg</td><td>'+dc+'</td><td><button class="del">削除</button></td>';
     tr.querySelector('.del').onclick=()=>{ if(confirm(r.date+' の記録を削除しますか?')){ saveAllRecs(allRecs().filter(x=>x.id!==r.id)); drawGraph(); initRec(); } };
     tb.appendChild(tr);
   });
